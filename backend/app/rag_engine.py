@@ -47,6 +47,36 @@ class RAGBusinessAdvisor:
         clean_df.to_sql(self.current_table_name, self.conn, if_exists="replace", index=False)
         self.df = clean_df
 
+    def detect_anomalies(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detects statistical data anomalies (outliers, unexpected spikes, or dips) in the dataset."""
+        if df is None or df.empty:
+            return []
+            
+        anomalies = []
+        try:
+            num_cols = df.select_dtypes(include=[np.number]).columns
+            for col in num_cols:
+                col_data = df[col].dropna()
+                if len(col_data) > 4:
+                    q1 = col_data.quantile(0.25)
+                    q3 = col_data.quantile(0.75)
+                    iqr = q3 - q1
+                    if iqr > 0:
+                        upper_bound = q3 + 2.5 * iqr
+                        outliers = col_data[col_data > upper_bound]
+                        if len(outliers) > 0:
+                            for idx, val in outliers.items():
+                                anomalies.append({
+                                    "column": str(col),
+                                    "row": int(idx) + 1,
+                                    "value": float(val),
+                                    "description": f"Unusually high value detected in '{col}': {val:,.2f}"
+                                })
+        except Exception as e:
+            print("Error detecting anomalies:", e)
+            
+        return anomalies
+
     def query_sql(self, sql_query: str) -> List[Dict[str, Any]]:
         """Executes grounded SQL queries against the vendor database."""
         try:
