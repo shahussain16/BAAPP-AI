@@ -6,7 +6,10 @@ import os
 import json
 import traceback
 from typing import Dict, Any, List, Optional
-from app.cleaner import clean_currency_numeric
+try:
+    from app.cleaner import clean_currency_numeric
+except ImportError:
+    from cleaner import clean_currency_numeric
 
 # Load .env file automatically
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')

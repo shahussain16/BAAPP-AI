@@ -5,12 +5,20 @@ import io
 import json
 from typing import Optional, List, Dict, Any
 
-from app.cleaner import analyze_dataset, clean_dataset, generate_sample_data, sanitize_df_for_json, compute_dashboard_metrics
-from app.manual_entry import process_manual_entries
-from app.models import CleanOptions, ManualEntryRequest, CleanRequest, ChatRequest
-from app.ai_analyst import ask_ai_analyst
-from app.export_service import generate_csv_bytes, generate_excel_bytes, generate_powerbi_bytes
-from app.rag_engine import advisor_instance
+try:
+    from app.cleaner import analyze_dataset, clean_dataset, generate_sample_data, sanitize_df_for_json, compute_dashboard_metrics
+    from app.manual_entry import process_manual_entries
+    from app.models import CleanOptions, ManualEntryRequest, CleanRequest, ChatRequest
+    from app.ai_analyst import ask_ai_analyst
+    from app.export_service import generate_csv_bytes, generate_excel_bytes, generate_powerbi_bytes
+    from app.rag_engine import advisor_instance
+except ImportError:
+    from cleaner import analyze_dataset, clean_dataset, generate_sample_data, sanitize_df_for_json, compute_dashboard_metrics
+    from manual_entry import process_manual_entries
+    from models import CleanOptions, ManualEntryRequest, CleanRequest, ChatRequest
+    from ai_analyst import ask_ai_analyst
+    from export_service import generate_csv_bytes, generate_excel_bytes, generate_powerbi_bytes
+    from rag_engine import advisor_instance
 
 app = FastAPI(
     title="BAAPP-AI Backend API (v2.0 RAG-Powered)",

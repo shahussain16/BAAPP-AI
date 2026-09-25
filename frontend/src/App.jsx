@@ -66,6 +66,28 @@ export default function App() {
     });
   };
 
+  // Safe API response parser to prevent unexpected HTML/non-JSON syntax crashes
+  const parseApiResponse = async (response, fallbackMsg) => {
+    if (!response.ok) {
+      let detailMessage = fallbackMsg || `Server error (${response.status})`;
+      try {
+        const text = await response.text();
+        try {
+          const json = JSON.parse(text);
+          detailMessage = json.detail || json.message || detailMessage;
+        } catch (jsonErr) {
+          if (text.includes('502 Bad Gateway') || text.includes('504 Gateway') || text.includes('An error occurred')) {
+            detailMessage = 'The backend server is starting up or temporarily busy. Please wait 5-10 seconds and try again!';
+          } else {
+            detailMessage = text.slice(0, 150);
+          }
+        }
+      } catch (e) {}
+      throw new Error(detailMessage);
+    }
+    return await response.json();
+  };
+
   // File Upload Handler
   const handleFileUpload = async (file) => {
     setIsLoading(true);
@@ -78,12 +100,7 @@ export default function App() {
         body: formData,
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || 'Upload failed');
-      }
-
-      const result = await response.json();
+      const result = await parseApiResponse(response, 'Upload failed');
       setFilename(result.filename);
       setRawData(result.raw_data);
       setAnalysis(result.analysis);
@@ -106,9 +123,8 @@ export default function App() {
     setIsLoading(true);
     try {
       const response = await fetch('/api/sample-data');
-      if (!response.ok) throw new Error('Failed to load sample dataset');
+      const result = await parseApiResponse(response, 'Failed to load sample dataset');
 
-      const result = await response.json();
       setFilename(result.filename);
       setRawData(result.raw_data);
       setAnalysis(result.analysis);
@@ -136,9 +152,7 @@ export default function App() {
         body: JSON.stringify({ entries }),
       });
 
-      if (!response.ok) throw new Error('Failed to process manual entry');
-
-      const result = await response.json();
+      const result = await parseApiResponse(response, 'Failed to process manual entry');
       setFilename(result.filename);
       setRawData(result.raw_data);
       setAnalysis(result.analysis);
@@ -166,9 +180,7 @@ export default function App() {
         body: JSON.stringify({ raw_data: rawData, options }),
       });
 
-      if (!response.ok) throw new Error('Failed to clean dataset');
-
-      const result = await response.json();
+      const result = await parseApiResponse(response, 'Failed to clean dataset');
       setCleanedData(result.cleaned_data);
       setCleanReport(result.clean_report);
       setDashboardMetrics(result.dashboard_metrics);
