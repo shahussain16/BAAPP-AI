@@ -10,11 +10,12 @@ from app.manual_entry import process_manual_entries
 from app.models import CleanOptions, ManualEntryRequest, CleanRequest, ChatRequest
 from app.ai_analyst import ask_ai_analyst
 from app.export_service import generate_csv_bytes, generate_excel_bytes, generate_powerbi_bytes
+from app.rag_engine import advisor_instance
 
 app = FastAPI(
-    title="BAAPP-AI Backend API",
-    description="AI-Powered Business Data Analyst API for Small Food/Retail Vendors",
-    version="1.0.0"
+    title="BAAPP-AI Backend API (v2.0 RAG-Powered)",
+    description="AI-Powered Business Data Analyst & RAG Consultant API for Small Vendors",
+    version="2.0.0"
 )
 
 # Enable CORS for frontend integration
@@ -28,7 +29,7 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "online", "app": "BAAPP-AI Backend"}
+    return {"status": "online", "app": "BAAPP-AI Backend v2.0 RAG"}
 
 @app.get("/api/sample-data")
 def get_sample_data():
@@ -37,6 +38,7 @@ def get_sample_data():
     analysis = analyze_dataset(df_raw)
     df_clean, clean_report = clean_dataset(df_raw)
     metrics = compute_dashboard_metrics(df_clean)
+    anomalies = advisor_instance.detect_anomalies(df_clean)
     
     return {
         "filename": "sample_cafe_sales.csv",
@@ -44,46 +46,64 @@ def get_sample_data():
         "analysis": analysis,
         "cleaned_data": sanitize_df_for_json(df_clean),
         "clean_report": clean_report,
-        "dashboard_metrics": metrics
+        "dashboard_metrics": metrics,
+        "anomalies": anomalies
     }
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Handles CSV and Excel file uploads with robust multi-encoding fallbacks."""
-    filename = file.filename.lower()
-    content = await file.read()
-    
-    df = None
-    if filename.endswith(".csv") or not filename.endswith((".xlsx", ".xls")):
-        for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']:
+    """Handles CSV and Excel file uploads with robust multi-encoding and multi-delimiter fallbacks."""
+    try:
+        filename = file.filename.lower()
+        content = await file.read()
+        
+        df = None
+        if filename.endswith(".csv") or not filename.endswith((".xlsx", ".xls")):
+            for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']:
+                for sep in [None, ',', ';', '\t', '|']:
+                    try:
+                        kwargs = {'encoding': encoding}
+                        if sep:
+                            kwargs['sep'] = sep
+                        df = pd.read_csv(io.BytesIO(content), on_bad_lines='skip', **kwargs)
+                        if df is not None and not df.empty and len(df.columns) > 0:
+                            break
+                    except Exception:
+                        continue
+                if df is not None and not df.empty:
+                    break
+            if df is None:
+                raise HTTPException(status_code=400, detail="Could not read CSV file. Please check file structure or encoding.")
+        elif filename.endswith((".xlsx", ".xls")):
             try:
-                df = pd.read_csv(io.BytesIO(content), encoding=encoding)
-                break
-            except Exception:
-                continue
-        if df is None:
-            raise HTTPException(status_code=400, detail="Could not read CSV file. Please check file encoding.")
-    elif filename.endswith((".xlsx", ".xls")):
-        try:
-            df = pd.read_excel(io.BytesIO(content))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
+                df = pd.read_excel(io.BytesIO(content))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
 
-    if df is None or df.empty:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty or could not be parsed.")
+        if df is None or df.empty:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty or could not be parsed.")
 
-    analysis = analyze_dataset(df)
-    df_clean, clean_report = clean_dataset(df)
-    metrics = compute_dashboard_metrics(df_clean)
+        df.columns = [str(c).strip() if c is not None else f"Column_{i}" for i, c in enumerate(df.columns)]
 
-    return {
-        "filename": file.filename,
-        "raw_data": sanitize_df_for_json(df),
-        "analysis": analysis,
-        "cleaned_data": sanitize_df_for_json(df_clean),
-        "clean_report": clean_report,
-        "dashboard_metrics": metrics
-    }
+        analysis = analyze_dataset(df)
+        df_clean, clean_report = clean_dataset(df)
+        metrics = compute_dashboard_metrics(df_clean)
+        anomalies = advisor_instance.detect_anomalies(df_clean)
+
+        return {
+            "filename": file.filename,
+            "raw_data": sanitize_df_for_json(df),
+            "analysis": analysis,
+            "cleaned_data": sanitize_df_for_json(df_clean),
+            "clean_report": clean_report,
+            "dashboard_metrics": metrics,
+            "anomalies": anomalies
+        }
+    except HTTPException:
+        raise
+    except Exception as err:
+        print(f"File upload error: {err}")
+        raise HTTPException(status_code=400, detail=f"Unable to process spreadsheet: {str(err)}")
 
 @app.post("/api/manual-entry")
 def handle_manual_entry(payload: ManualEntryRequest):
@@ -134,6 +154,16 @@ def handle_chat_question(payload: ChatRequest):
     df = pd.DataFrame(payload.cleaned_data)
     ai_response = ask_ai_analyst(df, payload.question)
     return ai_response
+
+@app.post("/api/v2/advisor")
+def handle_v2_rag_advisor(payload: ChatRequest):
+    """BAAPP-AI v2.0 RAG & LLM Business Consultant Endpoint."""
+    if not payload.cleaned_data:
+        raise HTTPException(status_code=400, detail="No cleaned dataset provided to analyze.")
+        
+    df = pd.DataFrame(payload.cleaned_data)
+    advisor_response = advisor_instance.ask_advisor(payload.question, df)
+    return advisor_response
 
 # Export Endpoints
 @app.post("/api/export/csv")

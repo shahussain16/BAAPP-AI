@@ -1,73 +1,67 @@
 import React, { useState } from 'react';
-import { Send, Bot, User, Code, Sparkles, AlertCircle, BarChart2 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
-
-const COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#e11d48', '#0891b2'];
+import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 export default function AIChat({ cleanedData }) {
+  const [inputQuestion, setInputQuestion] = useState('');
   const [messages, setMessages] = useState([
     {
       sender: 'ai',
-      text: "Hello! I am your **BAAPP-AI Business Assistant**. Ask me plain-English questions about your sales, products, expenses, or peak days!",
-      chart: null,
-      code: null
+      text: "👋 **Hello! I am your AI Business Assistant powered by Google Gemini.**\n\nI can analyze your uploaded sales data and give you instant advice on menu optimization, sales trends, staffing, or growth ideas. Ask me anything!",
     }
   ]);
-  const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showCodeIdx, setShowCodeIdx] = useState(null);
 
   const suggestedQuestions = [
-    "Should I add new products or offerings?",
     "What is my top-performing item?",
-    "What should I stop selling or offering?",
-    "How can I improve overall business profit?",
-    "Where should I open my next branch location?",
+    "Should I add new products to my store?",
+    "What should I stop selling?",
+    "How can I improve my profit margins?",
+    "Where should I open my next branch?",
     "Are weekend sales higher than weekdays?"
   ];
 
   const handleSend = async (questionText) => {
-    const q = questionText || inputQuery;
-    if (!q || !q.trim()) return;
+    const query = questionText || inputQuestion;
+    if (!query.trim()) return;
 
-    // Append User Message
-    const userMsg = { sender: 'user', text: q };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputQuery('');
+    if (!cleanedData || cleanedData.length === 0) {
+      alert('Please upload or enter data first before asking the AI Assistant!');
+      return;
+    }
+
+    const newMessages = [...messages, { sender: 'user', text: query }];
+    setMessages(newMessages);
+    setInputQuestion('');
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/v2/advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          question: q,
-          cleaned_data: cleanedData || []
+          cleaned_data: cleanedData,
+          question: query
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get answer from AI Assistant');
-      }
+      if (!response.ok) throw new Error('AI Assistant query failed');
 
-      const data = await response.json();
-      const aiMsg = {
-        sender: 'ai',
-        text: data.explanation || "Analyzed your dataset successfully.",
-        chart: data.chart_config,
-        code: data.executed_code
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
-      console.error('Chat error:', err);
-      setMessages((prev) => [
-        ...prev,
+      const result = await response.json();
+      setMessages([
+        ...newMessages,
         {
           sender: 'ai',
-          text: "Sorry, I couldn't compute that answer right now. Make sure your dataset is loaded!",
-          chart: null,
-          code: null
+          text: result.explanation
+        }
+      ]);
+    } catch (err) {
+      console.error('Chat Error:', err);
+      setMessages([
+        ...newMessages,
+        {
+          sender: 'ai',
+          text: " Sorry, I ran into a network issue: " + err.message
         }
       ]);
     } finally {
@@ -76,125 +70,69 @@ export default function AIChat({ cleanedData }) {
   };
 
   return (
-    <div className="card-box" style={{ display: 'flex', flexDirection: 'column', height: '620px', padding: '1.5rem', margin: 0 }}>
-      {/* Chat Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
-        <div style={{ background: 'linear-gradient(135deg, #2563eb, #4f46e5)', color: 'white', padding: '0.6rem', borderRadius: '12px' }}>
-          <Bot size={22} />
-        </div>
-        <div>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>Ask BAAPP-AI Analyst</h3>
-          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-            Executes sandboxed pandas code on your uploaded dataset — zero hallucinated answers!
-          </p>
+    <div className="card-box" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', height: '650px', background: 'rgba(255, 255, 255, 0.95)' }}>
+      
+      {/* Clean Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899)', color: 'white', padding: '0.65rem', borderRadius: '14px', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)' }}>
+            <Bot size={22} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              AI Business Assistant
+              <span className="badge-tag" style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', color: '#059669', border: '1px solid #a7f3d0' }}>
+                Powered by Google Gemini
+              </span>
+            </h3>
+            <p style={{ fontSize: '0.84rem', color: '#64748b', margin: 0 }}>
+              Ask any business question in plain English about your spreadsheet data
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Suggested Questions Pills */}
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.85rem 0', borderBottom: '1px solid #f1f5f9' }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-          <Sparkles size={14} color="#2563eb" /> Suggested:
-        </span>
-        {suggestedQuestions.map((sq, idx) => (
+      {/* Preset Question Pills */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        {suggestedQuestions.map((q, idx) => (
           <button
             key={idx}
-            onClick={() => handleSend(sq)}
+            onClick={() => handleSend(q)}
             disabled={isLoading}
-            style={{
-              background: '#eff6ff',
-              color: '#1d4ed8',
-              border: '1px solid #bfdbfe',
-              borderRadius: '20px',
-              padding: '0.3rem 0.75rem',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
+            className="btn-sample"
+            style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', background: '#f8fafc', margin: 0, borderRadius: '20px' }}
           >
-            {sq}
+            💡 {q}
           </button>
         ))}
       </div>
 
-      {/* Chat Messages Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {messages.map((msg, index) => (
+      {/* Chat Messages Box */}
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1rem' }}>
+        {messages.map((msg, idx) => (
           <div
-            key={index}
+            key={idx}
             style={{
               display: 'flex',
               gap: '0.75rem',
-              alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%'
+              justify: msg.sender === 'user' ? 'flex-end' : 'flex-start'
             }}
           >
             {msg.sender === 'ai' && (
-              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#dbeafe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Bot size={18} />
+              <div style={{ width: 36, height: 36, borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 10px rgba(99, 102, 241, 0.3)' }}>
+                <Bot size={20} />
               </div>
             )}
 
-            <div
-              style={{
-                background: msg.sender === 'user' ? '#2563eb' : '#f8fafc',
-                color: msg.sender === 'user' ? 'white' : '#0f172a',
-                padding: '0.9rem 1.1rem',
-                borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                border: msg.sender === 'user' ? 'none' : '1px solid #e2e8f0',
-                fontSize: '0.92rem',
-                lineHeight: 1.5
-              }}
-            >
-              <div dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.text) }} />
-
-              {/* Render Embedded Recharts Chart if present */}
-              {msg.chart && msg.chart.data && msg.chart.data.length > 0 && (
-                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', marginTop: '0.85rem' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <BarChart2 size={16} color="#2563eb" />
-                    {msg.chart.title || 'Analysis Chart'}
-                  </div>
-                  <div style={{ width: '100%', height: 200 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={msg.chart.data} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey={msg.chart.xKey} tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip />
-                        <Bar dataKey={msg.chart.yKey} fill="#2563eb" radius={[4, 4, 0, 0]}>
-                          {msg.chart.data.map((entry, idx) => (
-                            <Cell key={`c-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Toggle Pandas Executed Code */}
-              {msg.code && (
-                <div style={{ marginTop: '0.6rem' }}>
-                  <button
-                    onClick={() => setShowCodeIdx(showCodeIdx === index ? null : index)}
-                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', padding: 0 }}
-                  >
-                    <Code size={13} />
-                    {showCodeIdx === index ? 'Hide Python pandas code' : 'View Python pandas code executed'}
-                  </button>
-                  {showCodeIdx === index && (
-                    <pre style={{ background: '#0f172a', color: '#38bdf8', padding: '0.65rem', borderRadius: '6px', fontSize: '0.78rem', marginTop: '0.4rem', overflowX: 'auto' }}>
-                      <code>{msg.code}</code>
-                    </pre>
-                  )}
-                </div>
-              )}
+            <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
+              <div style={{ whiteSpace: 'pre-line', fontSize: '0.92rem', lineHeight: 1.6 }}>
+                {msg.text}
+              </div>
             </div>
 
             {msg.sender === 'user' && (
-              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <User size={18} />
+              <div style={{ width: 36, height: 36, borderRadius: '12px', background: '#334155', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <User size={20} />
               </div>
             )}
           </div>
@@ -202,36 +140,48 @@ export default function AIChat({ cleanedData }) {
 
         {isLoading && (
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#dbeafe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Bot size={18} />
+            <div style={{ width: 36, height: 36, borderRadius: '12px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bot size={20} />
             </div>
-            <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.88rem', color: '#64748b' }}>
-              Running sandboxed pandas math...
+            <div className="chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.88rem', color: '#64748b' }}>
+              <Sparkles size={16} color="#6366f1" className="animate-spin" />
+              Thinking & analyzing your data with Google Gemini...
             </div>
           </div>
         )}
       </div>
 
       {/* Input Box */}
-      <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} style={{ display: 'flex', gap: '0.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', gap: '0.75rem' }}>
         <input
           type="text"
-          className="form-control"
-          placeholder="Ask any question about your sales, products, expenses..."
-          value={inputQuery}
-          onChange={(e) => setInputQuery(e.target.value)}
+          placeholder="Ask any question about your data (e.g. 'why were sales low last Saturday?')..."
+          value={inputQuestion}
+          onChange={(e) => setInputQuestion(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           disabled={isLoading}
+          style={{
+            flex: 1,
+            padding: '0.85rem 1.25rem',
+            border: '1px solid #cbd5e1',
+            borderRadius: '12px',
+            fontSize: '0.92rem',
+            fontFamily: 'inherit',
+            outline: 'none',
+            background: '#f8fafc'
+          }}
         />
-        <button type="submit" className="btn-primary" disabled={isLoading || !inputQuery.trim()}>
-          <Send size={16} />
+
+        <button
+          onClick={() => handleSend()}
+          disabled={isLoading || !inputQuestion.trim()}
+          className="btn-primary"
+          style={{ padding: '0.85rem 1.4rem' }}
+        >
+          <Send size={18} />
+          Ask Assistant
         </button>
-      </form>
+      </div>
     </div>
   );
-}
-
-// Simple markdown formatter helper for **bold** text
-function formatMarkdown(text) {
-  if (!text) return '';
-  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 }

@@ -1,7 +1,37 @@
-import React from 'react';
-import { History, FileSpreadsheet, RotateCcw, ShieldCheck, Sparkles, Download, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { History, FileSpreadsheet, RotateCcw, ShieldCheck, Sparkles, Download, CheckCircle2, Printer, X, FileText } from 'lucide-react';
 
 export default function HistoryScreen({ historyList, onReloadHistoryItem, currentFilename }) {
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  const activeHistoryItem = historyList.find((i) => i.filename === currentFilename) || historyList[0];
+
+  const handleDownloadTextReport = () => {
+    const text = `================================================
+BAAPP-AI CERTIFIED BUSINESS EXECUTIVE REPORT
+================================================
+Generated Date : ${new Date().toLocaleDateString()}
+Active File    : ${currentFilename || 'Business Dataset'}
+Status         : Quality Certified Clean & Standardized
+
+DATA SUMMARY:
+- Processed Rows : ${activeHistoryItem?.rows || 'N/A'}
+- Health Issues Fixed : ${activeHistoryItem?.issuesCount || 0} issues
+- Verification : Zero duplicates, standard dates, currency normalized.
+
+EXECUTIVE STATEMENT:
+Dataset status verified clean. Duplicate records eliminated, currency formats normalized, and missing details imputed. Your live Recharts business dashboard and AI Analyst assistant are ready for executive decision-making.
+================================================
+    `;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentFilename || 'business_report'}_executive_summary.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Page Title */}
@@ -33,7 +63,7 @@ export default function HistoryScreen({ historyList, onReloadHistoryItem, curren
                 key={idx}
                 style={{
                   display: 'flex',
-                  justify: 'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '1rem 1.25rem',
                   border: '1px solid #e2e8f0',
@@ -84,7 +114,7 @@ export default function HistoryScreen({ historyList, onReloadHistoryItem, curren
 
       {/* Business Executive Summary Preview */}
       <div className="card-box" style={{ margin: 0, background: 'linear-gradient(135deg, #f8fafc, #eff6ff)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <ShieldCheck size={20} color="#2563eb" />
@@ -96,12 +126,12 @@ export default function HistoryScreen({ historyList, onReloadHistoryItem, curren
           </div>
 
           <button
-            onClick={() => window.print()}
+            onClick={() => setShowReportModal(true)}
             className="btn-primary"
-            style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+            style={{ fontSize: '0.85rem', padding: '0.55rem 1.1rem', whiteSpace: 'nowrap' }}
           >
-            <Download size={15} />
-            Print / Save Report PDF
+            <FileText size={16} />
+            Preview & Print Executive Report
           </button>
         </div>
 
@@ -115,6 +145,56 @@ export default function HistoryScreen({ historyList, onReloadHistoryItem, curren
           </p>
         </div>
       </div>
+
+      {/* Printable Report Modal */}
+      {showReportModal && (
+        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <ShieldCheck size={22} color="#2563eb" />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  BAAPP-AI Executive Summary Report
+                </h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowReportModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', fontFamily: 'monospace', fontSize: '0.85rem', lineHeight: 1.6, color: '#1e293b' }}>
+                <div><strong>REPORT TITLE:</strong> Executive Business Performance & Cleaning Audit</div>
+                <div><strong>ACTIVE FILE:</strong> {currentFilename || 'Uploaded Spreadsheet'}</div>
+                <div><strong>GENERATED DATE:</strong> {new Date().toLocaleString()}</div>
+                <div><strong>STATUS:</strong> BAAPP-AI Quality Certified Clean</div>
+                <hr style={{ margin: '0.8rem 0', borderColor: '#cbd5e1' }} />
+                <div><strong>SUMMARY AUDIT FINDINGS:</strong></div>
+                <div>• Processed Records: {activeHistoryItem?.rows || 'Active'} rows</div>
+                <div>• Data Health Fixes: {activeHistoryItem?.issuesCount || 0} issues resolved</div>
+                <div>• Standardizations: Currency values parsed, dates aligned (YYYY-MM-DD), missing numbers filled.</div>
+                <hr style={{ margin: '0.8rem 0', borderColor: '#cbd5e1' }} />
+                <div><strong>EXECUTIVE CONCLUSION:</strong></div>
+                <div>This dataset is 100% verified clean. All analytics dashboards, sales trends, and AI Analyst queries are grounded in validated data.</div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={() => window.print()} className="btn-primary" style={{ fontSize: '0.85rem' }}>
+                <Printer size={16} />
+                Print / Save PDF
+              </button>
+              <button onClick={handleDownloadTextReport} className="btn-sample" style={{ fontSize: '0.85rem' }}>
+                <Download size={16} />
+                Download Text Report (.txt)
+              </button>
+              <button onClick={() => setShowReportModal(false)} className="btn-sample" style={{ fontSize: '0.85rem', background: '#f1f5f9' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

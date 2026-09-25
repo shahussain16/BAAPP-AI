@@ -9,12 +9,13 @@ import AIChat from './components/AIChat';
 import ExportBar from './components/ExportBar';
 import HistoryScreen from './components/HistoryScreen';
 import WhatIfSimulator from './components/WhatIfSimulator';
-import { Upload, Edit3, ArrowLeft, LayoutDashboard, Table, MessageSquareText, History, Zap } from 'lucide-react';
+import { Upload, Edit3, ArrowLeft, LayoutDashboard, Table, MessageSquareText, History, Zap, RotateCcw } from 'lucide-react';
 
 export default function App() {
   const [inputMode, setInputMode] = useState('upload'); // 'upload' | 'manual'
   const [currentStep, setCurrentStep] = useState(1); // 1: Input, 2: Review, 3: Complete View
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'whatif' | 'ai_chat' | 'cleaning' | 'history'
+  const [prevTab, setPrevTab] = useState('dashboard');
   const [filename, setFilename] = useState('');
   const [rawData, setRawData] = useState(null);
   const [cleanedData, setCleanedData] = useState(null);
@@ -23,6 +24,12 @@ export default function App() {
   const [dashboardMetrics, setDashboardMetrics] = useState(null);
   const [historyList, setHistoryList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Helper for changing tabs with history
+  const handleTabChange = (newTab) => {
+    setPrevTab(activeTab);
+    setActiveTab(newTab);
+  };
 
   // Load history from LocalStorage on mount
   useEffect(() => {
@@ -184,7 +191,20 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
+  // Soft Go Back (does not wipe loaded dataset)
+  const handleGoBack = () => {
+    if (activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+    } else {
+      setCurrentStep(1);
+    }
+  };
+
+  // Full Reset to Start Over
   const handleReset = () => {
+    if (cleanedData && !window.confirm('Start over and upload a new file? Your current active dataset preview will be cleared.')) {
+      return;
+    }
     setCurrentStep(1);
     setRawData(null);
     setCleanedData(null);
@@ -201,6 +221,26 @@ export default function App() {
       <main className="main-content">
         {currentStep === 1 && (
           <>
+            {/* Resume Active Dataset Banner if dataset in memory */}
+            {cleanedData && (
+              <div style={{ background: 'linear-gradient(135deg, #e0e7ff, #ede9fe)', border: '1px solid #c7d2fe', borderRadius: '14px', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <LayoutDashboard size={20} color="#4f46e5" />
+                  <div>
+                    <span style={{ fontWeight: 700, color: '#3730a3', fontSize: '0.95rem' }}>Active Dataset Loaded: {filename}</span>
+                    <p style={{ fontSize: '0.8rem', color: '#4338ca', margin: 0 }}>You can resume analyzing your dataset without uploading again.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCurrentStep(3)}
+                  className="btn-primary"
+                  style={{ padding: '0.5rem 1.1rem', fontSize: '0.85rem' }}
+                >
+                  Resume Dashboard →
+                </button>
+              </div>
+            )}
+
             <div className="hero-banner">
               <h1 className="hero-title">Simple Business Data Analysis for Small Vendors</h1>
               <p className="hero-subtitle">
@@ -242,19 +282,32 @@ export default function App() {
 
         {currentStep >= 2 && (
           <>
-            {/* Top Toolbar Header Row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <button
-                onClick={handleReset}
-                className="btn-sample"
-                style={{ margin: 0, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-              >
-                <ArrowLeft size={16} />
-                Upload Different Data
-              </button>
+            {/* Top Toolbar Header Row with Dual Navigation */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={handleGoBack}
+                  className="btn-sample"
+                  style={{ margin: 0, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                  title="Go back to previous tab or upload screen without clearing dataset"
+                >
+                  <ArrowLeft size={16} />
+                  Go Back
+                </button>
 
-              <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '20px', padding: '0.4rem 0.9rem', fontSize: '0.85rem', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                Active File: <strong style={{ color: '#0f172a' }}>{filename}</strong>
+                <button
+                  onClick={handleReset}
+                  className="btn-reset"
+                  style={{ margin: 0, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                  title="Reset application to upload a new spreadsheet"
+                >
+                  <RotateCcw size={14} />
+                  Start Over / Upload New
+                </button>
+              </div>
+
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '20px', padding: '0.4rem 0.9rem', fontSize: '0.85rem', color: '#1e40af', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                Active File: <strong>{filename}</strong>
               </div>
             </div>
 

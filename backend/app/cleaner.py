@@ -3,20 +3,32 @@ import numpy as np
 import re
 from typing import Dict, Any, List, Tuple
 
+import json
+
 def sanitize_df_for_json(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """Converts a DataFrame to a list of dicts with NaNs cleanly converted to None for JSON compliance."""
+    if df is None or df.empty:
+        return []
     cleaned_df = df.copy()
-    records = cleaned_df.to_dict(orient="records")
-    sanitized = []
-    for row in records:
-        clean_row = {}
-        for k, v in row.items():
-            if pd.isna(v) or str(v) == 'nan' or str(v) == '<NaT>' or v is np.nan:
-                clean_row[k] = None
-            else:
-                clean_row[k] = v
-        sanitized.append(clean_row)
-    return sanitized
+    cleaned_df.columns = [str(col).strip() if col is not None else f"Column_{i}" for i, col in enumerate(cleaned_df.columns)]
+    
+    try:
+        json_str = cleaned_df.to_json(orient="records", date_format="iso", default_handler=str)
+        return json.loads(json_str)
+    except Exception:
+        records = cleaned_df.to_dict(orient="records")
+        sanitized = []
+        for row in records:
+            clean_row = {}
+            for k, v in row.items():
+                if pd.isna(v) or str(v).lower() in ['nan', '<nat>', 'none', 'null'] or v is np.nan:
+                    clean_row[str(k)] = None
+                elif isinstance(v, (pd.Timestamp, np.datetime64)):
+                    clean_row[str(k)] = str(v)
+                else:
+                    clean_row[str(k)] = v
+            sanitized.append(clean_row)
+        return sanitized
 
 def parse_mixed_dates(val):
     """Safely parse mixed date format into YYYY-MM-DD string or leave as string if unparseable."""
@@ -38,19 +50,27 @@ def clean_currency_numeric(val):
     if pd.isna(val) or val is None:
         return None
     if isinstance(val, (int, float)):
-        return float(val)
+        return float(val) if not np.isnan(val) and not np.isinf(val) else None
     val_str = str(val).strip()
-    # Remove currency symbols, commas, and spaces
-    cleaned_str = re.sub(r'[^\d.-]', '', val_str)
     try:
+        cleaned_str = re.sub(r'[^\d.-]', '', val_str)
         return float(cleaned_str) if cleaned_str != "" else None
-    except ValueError:
+    except Exception:
         return None
 
 def analyze_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Analyzes a DataFrame and detects data quality issues with non-technical plain-English explanations.
     """
+    if df is None or df.empty:
+        return {
+            "total_rows": 0, "total_cols": 0, "columns": [],
+            "issues": [], "plain_english_summary": ["No records found."], "missing_details": {}
+        }
+    
+    df = df.copy()
+    df.columns = [str(col).strip() if col is not None else f"Column_{i}" for i, col in enumerate(df.columns)]
+
     total_rows = len(df)
     total_cols = len(df.columns)
     
@@ -435,6 +455,31 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> Dict[str, Any]:
                     "revenue": round(float(row.get('revenue', 0)), 2),
                     "expense": round(float(row.get('expense', 0)), 2)
                 })
+
+    return {
+        "domain": domain,
+        "domain_label": domain_label,
+        "metric_labels": {
+            "metric_1": metric_1_label,
+            "metric_2": metric_2_label,
+            "chart_1": chart_1_title,
+            "chart_2": chart_2_title,
+            "chart_3": chart_3_title,
+            "chart_4": chart_4_title,
+        },
+        "totals": {
+            "total_revenue": round(total_revenue, 2),
+            "total_expense": round(total_expense, 2),
+            "net_profit": round(net_profit, 2),
+            "profit_margin": profit_margin,
+            "total_items_sold": total_items_sold,
+            "best_day": best_day
+        },
+        "revenue_over_time": revenue_over_time,
+        "top_products": top_products,
+        "slow_products": slow_products,
+        "category_expenses": category_expenses
+    }
 
 def compute_sales_forecast(df: pd.DataFrame) -> Dict[str, Any]:
     """
