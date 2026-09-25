@@ -58,6 +58,56 @@ def clean_currency_numeric(val):
     except Exception:
         return None
 
+def profile_dataset_columns(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    Stage 1: Automatic Data Profiling (Statistical type detection based on values, not just header names).
+    Stage 2: Semantic Understanding (Pattern/AI mapping to business meaning).
+    """
+    profiles = []
+    total_rows = len(df)
+    
+    for col in df.columns:
+        series = df[col].dropna()
+        col_lower = str(col).lower()
+        unique_cnt = int(series.nunique())
+        unique_ratio = unique_cnt / total_rows if total_rows > 0 else 0
+        
+        num_parsed = series.apply(clean_currency_numeric).dropna()
+        date_parsed = series.apply(parse_mixed_dates).dropna()
+        
+        num_ratio = len(num_parsed) / len(series) if len(series) > 0 else 0
+        date_ratio = len(date_parsed) / len(series) if len(series) > 0 else 0
+        
+        stat_type = "text / string"
+        semantic_role = "General Label"
+        
+        if date_ratio > 0.5 or any(k in col_lower for k in ['date', 'day', 'time', 'month', 'year']):
+            stat_type = "date / time"
+            semantic_role = "Timestamp / Date"
+        elif num_ratio > 0.5:
+            if any(k in col_lower for k in ['price', 'cost', 'revenue', 'sale', 'amount', 'fee', 'rate', 'grade', 'score', 'total', 'gpa']):
+                stat_type = "currency / money"
+                semantic_role = "Primary Revenue / Money Metric"
+            else:
+                stat_type = "numeric"
+                semantic_role = "Quantity / Count / Score"
+        elif unique_ratio < 0.35 or unique_cnt <= 20:
+            stat_type = "categorical"
+            semantic_role = "Category / Grouping"
+        else:
+            stat_type = "identifier / label"
+            semantic_role = "Entity Name / Title / ID"
+
+        profiles.append({
+            "column": str(col),
+            "statistical_type": stat_type,
+            "semantic_guess": semantic_role,
+            "unique_values": unique_cnt,
+            "sample_value": str(series.iloc[0]) if len(series) > 0 else "N/A"
+        })
+        
+    return profiles
+
 def analyze_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Analyzes a DataFrame and detects data quality issues with non-technical plain-English explanations.
@@ -65,7 +115,8 @@ def analyze_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     if df is None or df.empty:
         return {
             "total_rows": 0, "total_cols": 0, "columns": [],
-            "issues": [], "plain_english_summary": ["No records found."], "missing_details": {}
+            "issues": [], "plain_english_summary": ["No records found."], "missing_details": {},
+            "column_profiles": []
         }
     
     df = df.copy()
@@ -73,6 +124,7 @@ def analyze_dataset(df: pd.DataFrame) -> Dict[str, Any]:
 
     total_rows = len(df)
     total_cols = len(df.columns)
+    column_profiles = profile_dataset_columns(df)
     
     issues = []
     plain_english_summary = []
@@ -222,7 +274,8 @@ def analyze_dataset(df: pd.DataFrame) -> Dict[str, Any]:
         "columns": list(df.columns),
         "issues": issues,
         "plain_english_summary": plain_english_summary,
-        "missing_details": missing_cols_detail
+        "missing_details": missing_cols_detail,
+        "column_profiles": column_profiles
     }
 
 def clean_dataset(df: pd.DataFrame, options: Dict[str, bool] = None) -> Tuple[pd.DataFrame, Dict[str, Any]]:

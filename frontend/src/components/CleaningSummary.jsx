@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Sparkles, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, ArrowRight, Cpu } from 'lucide-react';
 
 export default function CleaningSummary({ analysis, onApplyCleanOptions, isCleaning }) {
   const [options, setOptions] = useState({
@@ -56,6 +56,38 @@ export default function CleaningSummary({ analysis, onApplyCleanOptions, isClean
           ))}
         </ul>
       </div>
+
+      {/* Stage 1 & Stage 2: Automatic Data Profiling & AI Column Mapping Confirmation */}
+      {analysis?.column_profiles && analysis.column_profiles.length > 0 && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+            <Cpu size={18} color="#4f46e5" />
+            <h4 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Stage 1 & 2: Data Profiling & AI Semantic Role Mapping
+            </h4>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1rem' }}>
+            Our engine scanned your data values dynamically (never assuming hardcoded headers). Verify how each column was profiled:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            {analysis.column_profiles.map((prof, idx) => (
+              <div key={idx} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '0.85rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b', marginBottom: '0.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{prof.column}</span>
+                  <span className="badge-tag" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.7rem' }}>Confirmed ✓</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#4f46e5', fontWeight: 600 }}>
+                  Role: {prof.semantic_guess}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                  Type: {prof.statistical_type} • Sample: <em>"{prof.sample_value}"</em>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>
         Recommended Fix Toggles (Select what to clean):
