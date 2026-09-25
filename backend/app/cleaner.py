@@ -404,14 +404,35 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> Dict[str, Any]:
         chart_3_title = "Slow-Moving / Low-Volume Items"
         chart_4_title = "Sales & Expense Share by Category"
 
-    # Dynamic column identification with expanded keywords
-    date_col = next((c for c in cols if any(k in c.lower() for k in ['date', 'day', 'time', 'month', 'year', 'semester'])), None)
-    item_col = next((c for c in cols if any(k in c.lower() for k in ['item', 'product', 'name', 'desc', 'title', 'sku', 'goods', 'student', 'book', 'course', 'subject'])), None)
-    cat_col = next((c for c in cols if any(k in c.lower() for k in ['category', 'type', 'group', 'dept', 'department', 'class', 'genre', 'subject'])), None)
+    # Stage 1 Statistical Data Profiling (Value-based, header agnostic)
+    profiles = profile_dataset_columns(df)
     
-    rev_col = next((c for c in cols if any(k in c.lower() for k in ['revenue', 'total', 'sale', 'amount', 'earning', 'income', 'subtotal', 'value', 'grade', 'score', 'gpa'])), None)
-    price_col = next((c for c in cols if any(k in c.lower() for k in ['price', 'rate', 'unit price', 'unit_price', 'cost/unit', 'score'])), None)
-    qty_col = next((c for c in cols if any(k in c.lower() for k in ['qty', 'quantity', 'sold', 'units', 'count', 'volume', 'borrowed', 'checkout'])), None)
+    # 1. Date Column: First column statistically profiled as 'date / time' by actual values
+    date_col = next((p['column'] for p in profiles if p['statistical_type'] == 'date / time'), None)
+    if not date_col:
+        date_col = next((c for c in cols if any(k in c.lower() for k in ['date', 'day', 'time', 'month', 'year', 'semester'])), None)
+
+    # 2. Item / Entity Column: First column statistically profiled as 'identifier / label' by actual values
+    item_col = next((p['column'] for p in profiles if p['statistical_type'] == 'identifier / label'), None)
+    if not item_col:
+        item_col = next((c for c in cols if any(k in c.lower() for k in ['item', 'product', 'name', 'desc', 'title', 'sku', 'goods', 'student', 'book', 'course', 'subject'])), cols[0] if cols else None)
+
+    # 3. Categorical Column: First column statistically profiled as 'categorical' by value repetitions
+    cat_col = next((p['column'] for p in profiles if p['statistical_type'] == 'categorical' and p['column'] != item_col), None)
+    if not cat_col:
+        cat_col = next((c for c in cols if any(k in c.lower() for k in ['category', 'type', 'group', 'dept', 'department', 'class', 'genre', 'subject'])), None)
+
+    # 4. Revenue / Primary Value Column: First column statistically profiled as 'currency / money' by money symbols
+    rev_col = next((p['column'] for p in profiles if p['statistical_type'] == 'currency / money'), None)
+    if not rev_col:
+        rev_col = next((c for c in cols if any(k in c.lower() for k in ['revenue', 'total', 'sale', 'amount', 'earning', 'income', 'subtotal', 'value', 'grade', 'score', 'gpa'])), None)
+
+    # 5. Price, Quantity & Expense Columns
+    price_col = next((c for c in cols if any(k in c.lower() for k in ['price', 'rate', 'unit price', 'unit_price', 'cost/unit'])), None)
+    qty_col = next((p['column'] for p in profiles if p['statistical_type'] == 'numeric' and p['column'] not in [rev_col, price_col]), None)
+    if not qty_col:
+        qty_col = next((c for c in cols if any(k in c.lower() for k in ['qty', 'quantity', 'sold', 'units', 'count', 'volume', 'borrowed', 'checkout'])), None)
+
     exp_col = next((c for c in cols if any(k in c.lower() for k in ['expense', 'cost', 'spending', 'fee'])), None)
 
     temp_df = df.copy()
