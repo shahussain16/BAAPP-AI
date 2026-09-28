@@ -1,0 +1,7 @@
+Book Title,Genre,Checkout Count,Rating (1-5),Late Fine ($),Branch
+The Great Gatsby,Fiction,45,4.8,.00,Central Library
+To Kill a Mockingbird,Fiction,52,4.9,.00,Central Library
+Clean Code,Technology,38,4.7,.00,Tech Branch
+Python Crash Course,Technology,60,4.9,.00,Tech Branch
+Sapiens,History,28,4.6,.00,Westside Branch
+Calculus Made Easy,Mathematics,14,4.1,.00,Central Library

@@ -8,8 +8,10 @@ import traceback
 from typing import Dict, Any, List, Optional
 try:
     from app.cleaner import clean_currency_numeric
+    from app.ai_analyst import ask_ai_analyst
 except ImportError:
     from cleaner import clean_currency_numeric
+    from ai_analyst import ask_ai_analyst
 
 # Load .env file automatically
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -90,28 +92,33 @@ class RAGBusinessAdvisor:
 
     def ask_advisor(self, question: str, df: pd.DataFrame, custom_api_key: Optional[str] = None) -> Dict[str, Any]:
         """
-        True Generative LLM Reasoning Engine:
-        Connects directly to Google Gemini Flash API allowing vendors to ask ANY question
-        in plain English with zero training or rule limits!
+        True Hybrid RAG Reasoning Engine:
+        Connects to Google Gemini Flash API for fluid, natural business advice AND
+        executes Pandas sandbox math to generate dynamic Recharts visualization configs.
         """
         try:
             self.load_dataset(df)
             q_lower = question.lower().strip()
             self.conversation_memory.append({"role": "user", "content": question})
 
-            # Grounded Facts Summary Payload
+            # Grounded Facts & Sandbox Analytics execution
+            analyst_res = ask_ai_analyst(df, question)
+            chart_config = analyst_res.get("chart_config")
+            
             cols = list(self.df.columns)
             rev_col = next((c for c in cols if any(k in c for k in ['revenue', 'total', 'sale', 'amount', 'earning', 'price'])), cols[-1] if cols else 'revenue')
             item_col = next((c for c in cols if any(k in c for k in ['item', 'product', 'name', 'sku', 'desc'])), cols[0] if cols else 'item')
             
             sql_executed = f"SELECT {item_col}, SUM({rev_col}) as total_sales FROM {self.current_table_name} GROUP BY {item_col} ORDER BY total_sales DESC LIMIT 5;"
             grounded_facts = self.query_sql(sql_executed)
+            anomalies = self.detect_anomalies(df)
 
             total_records = len(df)
             top_item = str(grounded_facts[0][item_col]).title() if grounded_facts and item_col in grounded_facts[0] else "Leading Product"
             top_sales = float(grounded_facts[0]['total_sales']) if grounded_facts and 'total_sales' in grounded_facts[0] else 0
 
             active_key = custom_api_key or os.environ.get("GEMINI_API_KEY")
+            explanation = analyst_res.get("explanation", "")
 
             # --- TRUE GOOGLE GEMINI FLASH API INFERENCE ---
             if active_key and HAS_GENAI_SDK:
@@ -136,26 +143,18 @@ class RAGBusinessAdvisor:
                         model='gemini-flash-latest',
                         contents=full_prompt,
                     )
-                    
-                    return {
-                        "explanation": response.text,
-                        "grounded_facts": grounded_facts,
-                        "anomalies": [],
-                        "sql_executed": sql_executed,
-                        "engine_mode": "Google Gemini Flash API (True Generative AI)"
-                    }
+                    if response and response.text:
+                        explanation = response.text
                 except Exception as llm_err:
                     print("Google GenAI API call warning, using dynamic fallback:", llm_err)
-
-            # --- DYNAMIC GENERATIVE DATA ADVISOR (FALLBACK) ---
-            explanation = self.generate_smart_advisor_response(question, df, grounded_facts, top_item, top_sales)
 
             advisor_response = {
                 "explanation": explanation,
                 "grounded_facts": grounded_facts,
-                "anomalies": [],
+                "anomalies": anomalies,
+                "chart_config": chart_config,
                 "sql_executed": sql_executed,
-                "engine_mode": "Dynamic Generative Data Advisor"
+                "engine_mode": "Google Gemini Flash API + Hybrid Math Engine" if (active_key and HAS_GENAI_SDK) else "Dynamic Data Advisor Engine"
             }
 
             self.conversation_memory.append({"role": "assistant", "content": explanation})
@@ -167,6 +166,7 @@ class RAGBusinessAdvisor:
                 "explanation": f"Analyzed your dataset of {len(df)} records for '{question}'.",
                 "grounded_facts": [],
                 "anomalies": [],
+                "chart_config": None,
                 "sql_executed": "-- Query",
                 "engine_mode": "Fallback"
             }

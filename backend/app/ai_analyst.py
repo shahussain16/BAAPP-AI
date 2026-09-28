@@ -66,7 +66,7 @@ def detect_domain_terminology(df: pd.DataFrame) -> Dict[str, str]:
 def ask_ai_analyst(df: pd.DataFrame, question: str, api_key: Optional[str] = None) -> Dict[str, Any]:
     """
     True Schema-Aware Dynamic AI Analyst.
-    Reads dataset column structure dynamically. Never hardcodes 'menu' or 'bakery'.
+    Reads dataset column structure dynamically. Never hardcodes fixed headers.
     Supports OpenAI/LLM tool generation or dynamic schema execution.
     """
     if df.empty:
@@ -77,9 +77,21 @@ def ask_ai_analyst(df: pd.DataFrame, question: str, api_key: Optional[str] = Non
             "executed_code": "# Dataset is empty"
         }
 
+    # Clean numeric/currency strings in copy of df for math sandbox
+    working_df = df.copy()
+    for c in working_df.columns:
+        if working_df[c].dtype == 'object':
+            try:
+                s_str = working_df[c].astype(str).str.replace(r'[^0-9.-]', '', regex=True)
+                s_num = pd.to_numeric(s_str, errors='coerce')
+                if s_num.notna().sum() > 0.3 * len(working_df):
+                    working_df[c] = s_num.fillna(0)
+            except Exception:
+                pass
+
     q_lower = question.lower().strip()
-    cols = list(df.columns)
-    terms = detect_domain_terminology(df)
+    cols = list(working_df.columns)
+    terms = detect_domain_terminology(working_df)
     
     entity_sing = terms["entity_singular"]
     entity_plur = terms["entity_plural"]
@@ -89,7 +101,6 @@ def ask_ai_analyst(df: pd.DataFrame, question: str, api_key: Optional[str] = Non
     date_col = next((c for c in cols if any(k in str(c).lower() for k in ['date', 'day', 'time', 'month', 'year', 'timestamp'])), None)
     item_col = next((c for c in cols if any(k in str(c).lower() for k in ['item', 'product', 'name', 'desc', 'title', 'sku', 'goods', 'student', 'book', 'course', 'subject', 'part'])), cols[0] if cols else None)
     cat_col = next((c for c in cols if any(k in str(c).lower() for k in ['category', 'type', 'group', 'dept', 'department', 'class', 'genre', 'subject'])), None)
-    loc_col = next((c for c in cols if any(k in str(c).lower() for k in ['location', 'city', 'branch', 'store', 'region', 'area', 'zip'])), None)
     
     rev_col = next((c for c in cols if any(k in str(c).lower() for k in ['revenue', 'total', 'sale', 'amount', 'earning', 'income', 'subtotal', 'value', 'grade', 'score'])), None)
     price_col = next((c for c in cols if any(k in str(c).lower() for k in ['price', 'rate', 'unit price', 'unit_price', 'cost/unit'])), None)
@@ -100,36 +111,73 @@ def ask_ai_analyst(df: pd.DataFrame, question: str, api_key: Optional[str] = Non
 
     # --- SEMANTIC INTENT ROUTER ---
 
-    # 1. COUNT DISTINCT WEEKENDS / DAYS ("How many weekends are there?")
-    if any(k in q_lower for k in ['how many weekend', 'count weekend', 'number of weekend', 'how many saturday', 'how many sunday']):
-        if date_col:
-            code = f"""
-target_date = '{date_col}'
-temp = df.copy()
-temp['parsed_dt'] = pd.to_datetime(temp[target_date], errors='coerce')
-weekend_dates = temp[temp['parsed_dt'].dt.dayofweek.isin([5, 6])][target_date].dropna().unique()
-count_val = len(weekend_dates)
-date_list_str = ", ".join([str(d) for d in weekend_dates[:6]])
+    # 1. DISCONTINUE / LOWEST / WORST / STOP SELLING ("What should I stop selling?", "What is lowest product?")
+    if any(k in q_lower for k in ['stop', 'discontinue', 'remove', 'cut', 'drop', 'least', 'worst', 'lowest', 'slowest', 'bottom', 'bad']):
+        target_entity_col = item_col or cols[0]
+        code = f"""
+target_item_col = '{target_entity_col}'
+target_val_col = '{val_col}'
 
-explanation = f"There are **{{count_val}}** unique weekend day(s) recorded in your dataset: **{{date_list_str}}**."
-chart_data = [{{"metric": "Weekend Days", "count": count_val}}]
-chart_config = None
+temp = df.copy()
+temp[target_val_col] = pd.to_numeric(temp[target_val_col].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
+summary = temp.groupby(target_item_col)[target_val_col].sum().reset_index().sort_values(by=target_val_col, ascending=True)
+lowest_item = str(summary.iloc[0][target_item_col])
+lowest_val = float(summary.iloc[0][target_val_col])
+
+explanation = (
+    f"📉 **Data-Driven Discontinuation Advice**:\\n\\n"
+    f"Based on your dataset analysis, **{{lowest_item}}** is your lowest-performing **{entity_sing}** with a total of **${{lowest_val:,.2f}}**.\\n\\n"
+    f"💡 **Recommendation**: Consider discontinuing or promoting **{{lowest_item}}** with a promotional discount to clear out inventory and free up capacity for higher-demand {entity_plur}."
+)
+
+chart_data = summary.head(5).to_dict(orient='records')
+chart_config = {{
+    "type": "bar",
+    "xKey": target_item_col,
+    "yKey": target_val_col,
+    "title": f"Lowest Performing {{target_item_col.title()}}",
+    "data": chart_data
+}}
 result_data = chart_data
 """
-        else:
-            code = f"""
-explanation = "Your dataset does not contain a recognized 'Date' column to calculate weekend days."
-chart_config = None
-result_data = []
+
+    # 2. BEST / TOP PERFORMER ("What's the best product?", "What is top item?")
+    elif any(k in q_lower for k in ['best', 'top', 'highest', 'most popular', 'bestseller', 'lead', 'star', 'most sold']):
+        target_entity_col = item_col or cols[0]
+        code = f"""
+target_col = '{target_entity_col}'
+target_val = '{val_col}'
+
+temp = df.copy()
+temp[target_val] = pd.to_numeric(temp[target_val].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
+summary = temp.groupby(target_col)[target_val].sum().reset_index().sort_values(by=target_val, ascending=False)
+top_item = str(summary.iloc[0][target_col])
+top_val = float(summary.iloc[0][target_val])
+
+explanation = (
+    f"🏆 **Top Lead Performance Result**:\\n\\n"
+    f"Your #1 best-performing **{entity_sing}** is **{{top_item}}** with total revenue/value of **${{top_val:,.2f}}**.\\n\\n"
+    f"💡 **Recommendation**: Keep **{{top_item}}** fully stocked and feature it prominently in your prime catalog display space!"
+)
+chart_data = summary.head(5).to_dict(orient='records')
+chart_config = {{
+    "type": "bar",
+    "xKey": target_col,
+    "yKey": target_val,
+    "title": f"Top Performing {{target_col.title()}}",
+    "data": chart_data
+}}
+result_data = chart_data
 """
 
-    # 2. WEEKEND VS WEEKDAY COMPARISON ("Are weekend sales higher than weekdays?")
-    elif any(k in q_lower for k in ['higher than weekday', 'compare weekend', 'weekend vs weekday', 'weekend sales', 'weekday sales']):
+    # 3. WEEKEND VS WEEKDAY COMPARISON ("Are weekend sales higher than weekdays?")
+    elif any(k in q_lower for k in ['higher than weekday', 'compare weekend', 'weekend vs weekday', 'weekend sales', 'weekday sales', 'saturday', 'sunday']):
         if date_col:
             code = f"""
 target_date = '{date_col}'
 target_val = '{val_col}'
 temp = df.copy()
+temp[target_val] = pd.to_numeric(temp[target_val].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
 temp['parsed_dt'] = pd.to_datetime(temp[target_date], errors='coerce')
 temp['is_weekend'] = temp['parsed_dt'].dt.dayofweek.isin([5, 6]).map({{True: 'Weekend (Sat-Sun)', False: 'Weekday (Mon-Fri)'}})
 summary = temp.groupby('is_weekend')[target_val].agg(['sum', 'mean', 'count']).reset_index()
@@ -163,7 +211,30 @@ chart_config = None
 result_data = []
 """
 
-    # 3. PRODUCT / ITEM ADDITIONS ("Should I add new items?")
+    # 4. WEEKEND DAYS LIST / COUNT ("Which days are weekend?")
+    elif any(k in q_lower for k in ['weekend day', 'which days are weekend', 'list weekend']):
+        if date_col:
+            code = f"""
+target_date = '{date_col}'
+temp = df.copy()
+temp['parsed_dt'] = pd.to_datetime(temp[target_date], errors='coerce')
+weekend_dates = temp[temp['parsed_dt'].dt.dayofweek.isin([5, 6])][target_date].dropna().unique()
+count_val = len(weekend_dates)
+date_list_str = ", ".join([str(d) for d in weekend_dates[:6]])
+
+explanation = f"There are **{{count_val}}** unique weekend day(s) recorded in your dataset: **{{date_list_str}}**."
+chart_data = [{{"metric": "Weekend Days", "count": count_val}}]
+chart_config = None
+result_data = chart_data
+"""
+        else:
+            code = f"""
+explanation = "Your dataset does not contain a recognized 'Date' column to calculate weekend days."
+chart_config = None
+result_data = []
+"""
+
+    # 5. PRODUCT / ITEM ADDITIONS ("Should I add new items?")
     elif any(k in q_lower for k in ['add', 'new item', 'new product', 'expand', 'what else', 'suggestion', 'offer']):
         target_group = cat_col or item_col or cols[0]
         code = f"""
@@ -171,6 +242,7 @@ target_group_col = '{target_group}'
 target_val_col = '{val_col}'
 
 temp = df.copy()
+temp[target_val_col] = pd.to_numeric(temp[target_val_col].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
 summary = temp.groupby(target_group_col)[target_val_col].sum().reset_index().sort_values(by=target_val_col, ascending=False)
 top_group = str(summary.iloc[0][target_group_col])
 top_val = float(summary.iloc[0][target_val_col])
@@ -193,36 +265,7 @@ chart_config = {{
 result_data = chart_data
 """
 
-    # 4. DISCONTINUE / STOP OFFERING ("What should I stop selling?")
-    elif any(k in q_lower for k in ['stop selling', 'discontinue', 'remove', 'cut', 'drop', 'stop offering']):
-        target_entity_col = item_col or cols[0]
-        code = f"""
-target_item_col = '{target_entity_col}'
-target_val_col = '{val_col}'
-
-temp = df.copy()
-summary = temp.groupby(target_item_col)[target_val_col].sum().reset_index().sort_values(by=target_val_col, ascending=True)
-lowest_item = str(summary.iloc[0][target_item_col])
-lowest_val = float(summary.iloc[0][target_val_col])
-
-explanation = (
-    f"💡 **Data-Driven Discontinuation Advice**:\\n"
-    f"Based on your dataset, **{{lowest_item}}** is your lowest-performing **{entity_sing}** with a total value/sales of **${{lowest_val:,.2f}}**.\\n"
-    f"Consider reviewing or discontinuing **{{lowest_item}}** to free up capital and shelf/storage space for higher-performing {entity_plur}."
-)
-
-chart_data = summary.head(5).to_dict(orient='records')
-chart_config = {{
-    "type": "bar",
-    "xKey": target_item_col,
-    "yKey": target_val_col,
-    "title": f"Lowest Performing {{target_item_col.title()}}",
-    "data": chart_data
-}}
-result_data = chart_data
-"""
-
-    # 5. BUSINESS GROWTH STRATEGY ("How to improve business?")
+    # 6. BUSINESS GROWTH STRATEGY ("How to improve business?")
     elif any(k in q_lower for k in ['improve', 'grow', 'increase profit', 'advice', 'strategy', 'tips', 'optimize']):
         target_entity_col = item_col or cols[0]
         code = f"""
@@ -230,6 +273,7 @@ target_item_col = '{target_entity_col}'
 target_val_col = '{val_col}'
 
 temp = df.copy()
+temp[target_val_col] = pd.to_numeric(temp[target_val_col].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
 summary = temp.groupby(target_item_col)[target_val_col].sum().reset_index().sort_values(by=target_val_col, ascending=False)
 top_item = str(summary.iloc[0][target_item_col])
 top_val = float(summary.iloc[0][target_val_col])
@@ -252,7 +296,7 @@ chart_config = {{
 result_data = chart_data
 """
 
-    # 6. COUNT / HOW MANY QUERIES ("How many items...", "How many transactions...")
+    # 7. COUNT / HOW MANY QUERIES ("How many items...", "How many transactions...")
     elif q_lower.startswith(('how many', 'count', 'total number of')):
         target_entity_col = item_col or cat_col or cols[0]
         code = f"""
@@ -266,57 +310,15 @@ chart_config = None
 result_data = chart_data
 """
 
-    # 7. BEST / TOP PERFORMER QUERIES
-    elif any(k in q_lower for k in ['best', 'top', 'highest', 'most popular', 'best seller', 'best selling']):
-        target_entity_col = item_col or cols[0]
-        code = f"""
-target_col = '{target_entity_col}'
-target_val = '{val_col}'
-summary = df.groupby(target_col)[target_val].sum().reset_index().sort_values(by=target_val, ascending=False)
-top_item = str(summary.iloc[0][target_col])
-top_val = float(summary.iloc[0][target_val])
-
-explanation = f"Your top-performing **{entity_sing}** is **{{top_item}}** with a total of **${{top_val:,.2f}}**."
-chart_data = summary.head(5).to_dict(orient='records')
-chart_config = {{
-    "type": "bar",
-    "xKey": target_col,
-    "yKey": target_val,
-    "title": f"Top Performing {{target_col.title()}}",
-    "data": chart_data
-}}
-result_data = chart_data
-"""
-
-    # 8. LOWEST / WORST PERFORMER QUERIES
-    elif any(k in q_lower for k in ['least', 'worst', 'lowest', 'slowest', 'least money', 'low sales']):
-        target_entity_col = item_col or cols[0]
-        code = f"""
-target_col = '{target_entity_col}'
-target_val = '{val_col}'
-summary = df.groupby(target_col)[target_val].sum().reset_index().sort_values(by=target_val, ascending=True)
-low_item = str(summary.iloc[0][target_col])
-low_val = float(summary.iloc[0][target_val])
-
-explanation = f"Your lowest-performing **{entity_sing}** is **{{low_item}}** with a value of **${{low_val:,.2f}}**."
-chart_data = summary.head(5).to_dict(orient='records')
-chart_config = {{
-    "type": "bar",
-    "xKey": target_col,
-    "yKey": target_val,
-    "title": f"Lowest Performing {{target_col.title()}}",
-    "data": chart_data
-}}
-result_data = chart_data
-"""
-
-    # 9. GENERAL DYNAMIC FALLBACK (Dynamic Column Analytics)
+    # 8. GENERAL DYNAMIC FALLBACK (Dynamic Column Analytics)
     else:
         target_entity_col = item_col or cols[0]
         code = f"""
 target_col = '{target_entity_col}'
 target_val = '{val_col}'
-summary = df.groupby(target_col)[target_val].sum().reset_index().sort_values(by=target_val, ascending=False)
+temp = df.copy()
+temp[target_val] = pd.to_numeric(temp[target_val].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce').fillna(0)
+summary = temp.groupby(target_col)[target_val].sum().reset_index().sort_values(by=target_val, ascending=False)
 top_item = str(summary.iloc[0][target_col])
 top_val = float(summary.iloc[0][target_val])
 
@@ -337,8 +339,8 @@ chart_config = {{
 result_data = chart_data
 """
 
-    # Execute sandbox
-    exec_response = run_pandas_sandbox(df, code)
+    # Execute sandbox with cleaned working_df
+    exec_response = run_pandas_sandbox(working_df, code)
     
     if exec_response["success"]:
         return {
@@ -349,8 +351,9 @@ result_data = chart_data
         }
     else:
         return {
-            "explanation": f"I analyzed your dataset for **'{question}'**. Found {len(df)} total records.",
+            "explanation": f"I analyzed your dataset for **'{question}'**. Found {len(working_df)} total records.",
             "data_result": [],
             "chart_config": None,
-            "executed_code": exec_response.get("executed_code", "")
+            "executed_code": exec_response.get("executed_code", ""),
+            "error": exec_response.get("error")
         }

@@ -166,12 +166,20 @@ export default function Dashboard({ metrics, cleanedData }) {
             <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Top Performers</span>
           </div>
 
-          <div style={{ width: '100%', height: 280 }}>
+          <div style={{ width: '100%', height: 320 }}>
             {topProducts.length > 0 ? (
               <ResponsiveContainer>
-                <BarChart data={topProducts} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={topProducts} margin={{ top: 10, right: 10, left: 0, bottom: 55 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="item" tick={{ fontSize: 11 }} interval={0} />
+                  <XAxis
+                    dataKey="item"
+                    tick={{ fontSize: 10 }}
+                    angle={-25}
+                    textAnchor="end"
+                    interval={0}
+                    height={50}
+                    tickFormatter={(str) => String(str).length > 14 ? String(str).substring(0, 12) + '...' : String(str)}
+                  />
                   <YAxis tick={{ fontSize: 12 }} tickFormatter={(val) => isCurrencyDomain ? `$${val}` : `${val}`} />
                   <Tooltip formatter={(value) => [isCurrencyDomain ? `$${Number(value).toFixed(2)}` : Number(value), 'Metric']} />
                   <Bar dataKey="revenue" name="Metric" fill="#059669" radius={[6, 6, 0, 0]}>
@@ -199,13 +207,19 @@ export default function Dashboard({ metrics, cleanedData }) {
             <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Attention Items</span>
           </div>
 
-          <div style={{ width: '100%', height: 280 }}>
+          <div style={{ width: '100%', height: 320 }}>
             {slowProducts.length > 0 ? (
               <ResponsiveContainer>
-                <BarChart data={slowProducts} layout="vertical" margin={{ top: 10, right: 20, left: 40, bottom: 0 }}>
+                <BarChart data={slowProducts} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                   <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis dataKey="item" type="category" tick={{ fontSize: 11 }} />
+                  <YAxis
+                    dataKey="item"
+                    type="category"
+                    tick={{ fontSize: 10 }}
+                    width={90}
+                    tickFormatter={(str) => String(str).length > 12 ? String(str).substring(0, 10) + '...' : String(str)}
+                  />
                   <Tooltip formatter={(value) => [`${value}`, 'Volume / Count']} />
                   <Bar dataKey="quantity" name="Volume / Count" fill="#d97706" radius={[0, 6, 6, 0]} />
                 </BarChart>
@@ -228,7 +242,7 @@ export default function Dashboard({ metrics, cleanedData }) {
             <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Category Share</span>
           </div>
 
-          <div style={{ width: '100%', height: 280 }}>
+          <div style={{ width: '100%', height: 320 }}>
             {categoryExpenses.length > 0 ? (
               <ResponsiveContainer>
                 <PieChart>
@@ -237,17 +251,18 @@ export default function Dashboard({ metrics, cleanedData }) {
                     dataKey="revenue"
                     nameKey="category"
                     cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={95}
-                    paddingAngle={5}
-                    label={({ category, percent }) => `${category} (${(percent * 100).toFixed(0)}%)`}
+                    cy="42%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={4}
+                    label={({ category, percent }) => (percent && percent > 0.04) ? `${category} (${(percent * 100).toFixed(0)}%)` : null}
                   >
                     {categoryExpenses.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value) => [isCurrencyDomain ? `$${Number(value).toFixed(2)}` : Number(value), 'Category Share']} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

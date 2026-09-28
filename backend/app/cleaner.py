@@ -53,7 +53,7 @@ def clean_currency_numeric(val):
         return float(val) if not np.isnan(val) and not np.isinf(val) else None
     val_str = str(val).strip()
     try:
-        cleaned_str = re.sub(r'[^\d.-]', '', val_str)
+        cleaned_str = re.sub(r'[^\d\.-]', '', val_str)
         return float(cleaned_str) if cleaned_str != "" else None
     except Exception:
         return None
